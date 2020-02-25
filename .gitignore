@@ -1,0 +1,6 @@
+# IDEA Settings
+.idea/
+
+# Built binary files by `go build`
+sudoku-solver
+main
