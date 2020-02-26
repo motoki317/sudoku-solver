@@ -4,3 +4,6 @@
 # Built binary files by `go build`
 sudoku-solver
 main
+
+# memo
+sudoku_examples.txt
