@@ -6,6 +6,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
+)
+
+var (
+	count = 0
 )
 
 type Board [][]int
@@ -63,48 +68,80 @@ func (b *Board) String() string {
 }
 
 // Solves the sudoku, returns true if successfully solved the game.
-func (b *Board) Solve() bool {
+func (b *Board) Solve(depth int) bool {
+	possibilitiesMap := make([][][]int, 9)
+
+	for i := 0; i < 9; i++ {
+		possibilitiesMap[i] = make([][]int, 9)
+		for j := 0; j < 9; j++ {
+			if (*b)[i][j] != 0 {
+				continue
+			}
+
+			// check possible numbers for each unfilled square
+			possibilitiesMap[i][j] = b.possibleNumbersAt(i, j)
+		}
+	}
+
+	count++
+	if count%100_000 == 0 {
+		fmt.Printf("Checked %v-th time, depth %v\n", count, depth)
+		fmt.Println(b.String())
+	}
+
+	// check if any square is not fillable
 	for i := 0; i < 9; i++ {
 		for j := 0; j < 9; j++ {
 			if (*b)[i][j] != 0 {
 				continue
 			}
 
-			// fill unfilled numbers
-			possible := b.possibleNumbersAt(i, j)
-			if len(possible) == 0 {
+			possibilities := possibilitiesMap[i][j]
+			if len(possibilities) == 0 {
 				return false
 			}
-			if len(possible) == 1 {
-				(*b)[i][j] = possible[0]
+		}
+	}
+
+	// fill if there's only one possibility
+	for i := 0; i < 9; i++ {
+		for j := 0; j < 9; j++ {
+			if (*b)[i][j] != 0 {
+				continue
+			}
+
+			possibilities := possibilitiesMap[i][j]
+			if len(possibilities) == 1 {
+				(*b)[i][j] = possibilities[0]
 				// fill the number and check
-				if b.Solve() {
+				if b.Solve(depth + 1) {
 					return true
 				}
 				(*b)[i][j] = 0
 			}
-			// if multiple numbers are possible, first fill the determined numbers and check them later
 		}
 	}
 
+	// if multiple numbers are possible, check each of them one by one
 	for i := 0; i < 9; i++ {
 		for j := 0; j < 9; j++ {
 			if (*b)[i][j] != 0 {
 				continue
 			}
 
-			// check each possibilities
-			possibilities := b.possibleNumbersAt(i, j)
-			for _, num := range possibilities {
-				(*b)[i][j] = num
-				// assume the number and check
-				if b.Solve() {
-					return true
+			possibilities := possibilitiesMap[i][j]
+			if len(possibilities) > 1 {
+				for _, num := range possibilities {
+					(*b)[i][j] = num
+					// assume the number and check
+					if b.Solve(depth + 1) {
+						return true
+					}
 				}
+				// all combinations failed
+				(*b)[i][j] = 0
+				return false
 			}
-			// all combinations failed
-			(*b)[i][j] = 0
-			return false
 		}
 	}
 
@@ -148,15 +185,46 @@ func (b *Board) isSolved() bool {
 func (b *Board) possibleNumbersAt(i, j int) []int {
 	old := (*b)[i][j]
 
-	possible := make([]int, 0)
-	for newNum := 1; newNum <= 9; newNum++ {
-		(*b)[i][j] = newNum
-		if b.isValidAt(i, j) {
-			possible = append(possible, newNum)
+	taken := make([]bool, 9)
+	// row
+	for _, num := range (*b)[i] {
+		if num == 0 {
+			continue
+		}
+		taken[num-1] = true
+	}
+	// column
+	for i := 0; i < 9; i++ {
+		num := (*b)[i][j]
+		if num == 0 {
+			continue
+		}
+
+		taken[num-1] = true
+	}
+	// block
+	blockI := i / 3
+	blockJ := j / 3
+
+	for i := blockI * 3; i < (blockI+1)*3; i++ {
+		for j := blockJ * 3; j < (blockJ+1)*3; j++ {
+			num := (*b)[i][j]
+			if num == 0 {
+				continue
+			}
+
+			taken[num-1] = true
 		}
 	}
 
 	(*b)[i][j] = old
+
+	possible := make([]int, 0)
+	for i, b := range taken {
+		if !b {
+			possible = append(possible, i+1)
+		}
+	}
 
 	return possible
 }
@@ -168,33 +236,33 @@ func (b *Board) isValidAt(i, j int) bool {
 
 // Checks row validity
 func (b *Board) checkRowValidity(i int) bool {
-	checked := make(map[int]bool)
+	checked := make([]bool, 9)
 	for _, num := range (*b)[i] {
 		if num == 0 {
 			continue
 		}
 
-		if duplicated, ok := checked[num]; duplicated || ok {
+		if checked[num-1] {
 			return false
 		}
-		checked[num] = true
+		checked[num-1] = true
 	}
 	return true
 }
 
 // Checks column validity
 func (b *Board) checkColumnValidity(j int) bool {
-	checked := make(map[int]bool)
+	checked := make([]bool, 9)
 	for i := 0; i < 9; i++ {
 		num := (*b)[i][j]
 		if num == 0 {
 			continue
 		}
 
-		if duplicated, ok := checked[num]; duplicated || ok {
+		if checked[num-1] {
 			return false
 		}
-		checked[num] = true
+		checked[num-1] = true
 	}
 	return true
 }
@@ -204,7 +272,7 @@ func (b *Board) checkBlockValidity(i, j int) bool {
 	blockI := i / 3
 	blockJ := j / 3
 
-	checked := make(map[int]bool)
+	checked := make([]bool, 9)
 	for i := blockI * 3; i < (blockI+1)*3; i++ {
 		for j := blockJ * 3; j < (blockJ+1)*3; j++ {
 			num := (*b)[i][j]
@@ -212,10 +280,10 @@ func (b *Board) checkBlockValidity(i, j int) bool {
 				continue
 			}
 
-			if duplicated, ok := checked[num]; duplicated || ok {
+			if checked[num-1] {
 				return false
 			}
-			checked[num] = true
+			checked[num-1] = true
 		}
 	}
 	return true
@@ -240,10 +308,13 @@ func main() {
 	}
 
 	fmt.Println("Solving...")
-	if board.Solve() {
+	start := time.Now().UnixNano()
+	if board.Solve(0) {
 		fmt.Println("Solved!")
 	} else {
 		fmt.Println("Not solvable...")
 	}
+	end := time.Now().UnixNano()
 	fmt.Println(board.String())
+	fmt.Printf("Took %v ms to solve.\n", float64(end-start)/float64(1_000_000))
 }
