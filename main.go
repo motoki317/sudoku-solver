@@ -118,6 +118,7 @@ func (b *Board) Solve(depth int) bool {
 					return true
 				}
 				(*b)[i][j] = 0
+				return false
 			}
 		}
 	}
