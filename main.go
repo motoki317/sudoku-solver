@@ -67,8 +67,8 @@ func (b *Board) String() string {
 	return ret
 }
 
-// Solves the sudoku, returns true if successfully solved the game.
-func (b *Board) Solve(depth int) bool {
+// Solves the sudoku, returns the board if successfully solved the game.
+func (b *Board) Solve(depth int) *Board {
 	possibilitiesMap := make([][][]int, 9)
 
 	for i := 0; i < 9; i++ {
@@ -79,7 +79,12 @@ func (b *Board) Solve(depth int) bool {
 			}
 
 			// check possible numbers for each unfilled square
-			possibilitiesMap[i][j] = b.possibleNumbersAt(i, j)
+			// if any of them were not fillable, then return immediately
+			if possibilities := b.possibleNumbersAt(i, j); len(possibilities) == 0 {
+				return nil
+			} else {
+				possibilitiesMap[i][j] = possibilities
+			}
 		}
 	}
 
@@ -87,20 +92,6 @@ func (b *Board) Solve(depth int) bool {
 	if count%100_000 == 0 {
 		fmt.Printf("Checked %v-th time, depth %v\n", count, depth)
 		fmt.Println(b.String())
-	}
-
-	// check if any square is not fillable
-	for i := 0; i < 9; i++ {
-		for j := 0; j < 9; j++ {
-			if (*b)[i][j] != 0 {
-				continue
-			}
-
-			possibilities := possibilitiesMap[i][j]
-			if len(possibilities) == 0 {
-				return false
-			}
-		}
 	}
 
 	// fill if there's only one possibility
@@ -114,11 +105,11 @@ func (b *Board) Solve(depth int) bool {
 			if len(possibilities) == 1 {
 				(*b)[i][j] = possibilities[0]
 				// fill the number and check
-				if b.Solve(depth + 1) {
-					return true
+				if solvedBoard := b.Solve(depth + 1); solvedBoard != nil {
+					return solvedBoard
 				}
 				(*b)[i][j] = 0
-				return false
+				return nil
 			}
 		}
 	}
@@ -132,22 +123,47 @@ func (b *Board) Solve(depth int) bool {
 
 			possibilities := possibilitiesMap[i][j]
 			if len(possibilities) > 1 {
+				solved := make(chan *Board, 0)
+
+				// assume the number and check them concurrently
 				for _, num := range possibilities {
-					(*b)[i][j] = num
-					// assume the number and check
-					if b.Solve(depth + 1) {
-						return true
+					finalNum := num
+					go func() {
+						cloned := b.clone()
+						(*cloned)[i][j] = finalNum
+						solved <- cloned.Solve(depth + 1)
+					}()
+				}
+
+				for i := 0; i < len(possibilities); i++ {
+					if solvedBoard := <-solved; solvedBoard != nil {
+						return solvedBoard
 					}
 				}
-				// all combinations failed
-				(*b)[i][j] = 0
-				return false
+				return nil
 			}
 		}
 	}
 
 	// if none of above code returned true of false, then all numbers must have been filled
-	return b.isSolved()
+	if b.isSolved() {
+		return b
+	} else {
+		return nil
+	}
+}
+
+func (b *Board) clone() *Board {
+	var newBoard Board = make([][]int, 9)
+
+	for i := 0; i < 9; i++ {
+		newBoard[i] = make([]int, 9)
+		for j := 0; j < 9; j++ {
+			newBoard[i][j] = (*b)[i][j]
+		}
+	}
+
+	return &newBoard
 }
 
 // Checks the entire board is filled and is valid
@@ -310,12 +326,12 @@ func main() {
 
 	fmt.Println("Solving...")
 	start := time.Now().UnixNano()
-	if board.Solve(0) {
+	if solvedBoard := board.Solve(0); solvedBoard != nil {
 		fmt.Println("Solved!")
+		fmt.Println(solvedBoard.String())
 	} else {
 		fmt.Println("Not solvable...")
 	}
 	end := time.Now().UnixNano()
-	fmt.Println(board.String())
 	fmt.Printf("Took %v ms to solve.\n", float64(end-start)/float64(1_000_000))
 }
