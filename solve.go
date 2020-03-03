@@ -2,10 +2,12 @@ package main
 
 // Solves the sudoku using goroutines, returns the board if successfully solved the game.
 func (b *Board) Solve() *Board {
-	possibilitiesMap := make([][][]int, 9)
+	iMin := -1
+	jMin := -1
+	min := 10
+	var possibilities []int
 
 	for i := 0; i < 9; i++ {
-		possibilitiesMap[i] = make([][]int, 9)
 		for j := 0; j < 9; j++ {
 			if (*b)[i][j] != 0 {
 				continue
@@ -13,61 +15,33 @@ func (b *Board) Solve() *Board {
 
 			// check possible numbers for each unfilled square
 			// if any of them were not fillable, then return immediately
-			if possibilities := b.possibleNumbersAt(i, j); len(possibilities) == 0 {
-				return nil
-			} else {
-				possibilitiesMap[i][j] = possibilities
+			if p := b.possibleNumbersAt(i, j); len(p) < min {
+				min = len(p)
+				possibilities = p
+				iMin = i
+				jMin = j
 			}
 		}
 	}
 
-	// fill if there's only one possibility
-	for i := 0; i < 9; i++ {
-		for j := 0; j < 9; j++ {
-			if (*b)[i][j] != 0 {
-				continue
-			}
-
-			possibilities := possibilitiesMap[i][j]
-			if len(possibilities) == 1 {
-				(*b)[i][j] = possibilities[0]
-				// fill the number and check
-				if solvedBoard := b.Solve(); solvedBoard != nil {
-					return solvedBoard
-				}
-				(*b)[i][j] = 0
-				return nil
-			}
+	if possibilities == nil {
+		// if all numbers have been filled
+		if b.isSolved() {
+			return b
+		} else {
+			return nil
 		}
 	}
 
-	// if multiple numbers are possible, check each of them one by one
-	for i := 0; i < 9; i++ {
-		for j := 0; j < 9; j++ {
-			if (*b)[i][j] != 0 {
-				continue
-			}
-
-			possibilities := possibilitiesMap[i][j]
-			if len(possibilities) > 1 {
-				for _, num := range possibilities {
-					(*b)[i][j] = num
-					if solvedBoard := b.Solve(); solvedBoard != nil {
-						return solvedBoard
-					}
-				}
-				(*b)[i][j] = 0
-				return nil
-			}
+	for _, num := range possibilities {
+		(*b)[iMin][jMin] = num
+		if solvedBoard := b.Solve(); solvedBoard != nil {
+			return solvedBoard
 		}
 	}
 
-	// if none of above code returned true of false, then all numbers must have been filled
-	if b.isSolved() {
-		return b
-	} else {
-		return nil
-	}
+	(*b)[iMin][jMin] = 0
+	return nil
 }
 
 func (b *Board) clone() *Board {
@@ -83,7 +57,7 @@ func (b *Board) clone() *Board {
 	return &newBoard
 }
 
-// Checks the entire board is filled and is valid
+// Checks if the entire board is filled and is valid
 func (b *Board) isSolved() bool {
 	// check if all is filled
 	for i := 0; i < 9; i++ {
